@@ -21,7 +21,7 @@ const (
 	QRCODE_URL        = "https://login.weixin.qq.com/qrcode/"
 	LOGIN_URL         = "https://login.weixin.qq.com/cgi-bin/mmwebwx-bin/login"
 	INIT_URL          = "https://%s/cgi-bin/mmwebwx-bin/webwxinit?pass_ticket=%s&skey=%s&r=%s"
-	STATUS_NOTIFY_URL = "https://%s/cgi-bin/mmwebwx-bin/webwxinit?lang=zh_CN&pass_ticket=%s"
+	STATUS_NOTIFY_URL = "https://%s/cgi-bin/mmwebwx-bin/webwxstatusnotify?lang=zh_CN&pass_ticket=%s"
 	CONTACT_URL       = "https://%s/cgi-bin/mmwebwx-bin/webwxgetcontact?pass_ticket=%s&skey=%s&r=%s"
 	SYNC_CHECK        = "https://%s/cgi-bin/mmwebwx-bin/synccheck"
 	MSG_URL           = "https://%s/cgi-bin/mmwebwx-bin/webwxsync?sid=%s&skey=%s&pass_ticket=%s"
@@ -130,6 +130,13 @@ func now() string {
 	return strconv.FormatInt(time.Now().Unix()*1000, 10)
 }
 
+func getDeviceId() string{
+	rnd := rand.New(rand.NewSource(time.Now().UnixNano()))
+	pre := fmt.Sprintf("%08v", rnd.Int31n(100000000))
+	end := fmt.Sprintf("%07v", rnd.Int31n(10000000))
+	return "e" + pre + end
+}
+
 func match(express string, content string) (string, error) {
 	r, _ := regexp.Compile(express)
 	arr := r.FindStringSubmatch(content)
@@ -146,7 +153,7 @@ func UUID() (string, error) {
 	param["lang"] = []string{"zh_CN"}
 	param["_"] = []string{now()}
 	url := BuildGetUrl(UUID_URL, param)
-	req, _ := RequestBuilder().Url(url).Build()
+	req, _ := RequestBuilder().Header("User-agent","Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/48.0.2564.109 Safari/537.36").Url(url).Build()
 	resp, err := client.Execute(req)
 	if err == nil {
 		result, _ := resp.BodyString()
@@ -168,7 +175,7 @@ func UUID() (string, error) {
 
 func ShowQrCode(uuid string) {
 	postbody := FormBodyBuilder().AddParam("t", "webwx").AddParam("_", now()).Build()
-	req, _ := RequestBuilder().Url(QRCODE_URL + uuid).Post(postbody).Build()
+	req, _ := RequestBuilder().Header("User-agent","Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/48.0.2564.109 Safari/537.36").Url(QRCODE_URL + uuid).Post(postbody).Build()
 	resp, err := client.Execute(req)
 	if err == nil {
 		bytes, _ := resp.BodyByte()
@@ -185,7 +192,7 @@ func waitForLogin(uuid string, time4Wait time.Duration) bool {
 	param["uuid"] = []string{uuid}
 	param["_"] = []string{now()}
 	url := BuildGetUrl(LOGIN_URL, param)
-	req, _ := RequestBuilder().Url(url).Build()
+	req, _ := RequestBuilder().Header("User-agent","Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/48.0.2564.109 Safari/537.36").Url(url).Build()
 	resp, err := client.Execute(req)
 	if err != nil {
 		log.Println("get qrcode error:", err)
@@ -232,17 +239,17 @@ func getCookie() *Session {
 	if cookieUrl == "" {
 
 	}
-	req, _ := RequestBuilder().Url(cookieUrl).Build()
+	req, _ := RequestBuilder().Header("User-agent","Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/48.0.2564.109 Safari/537.36").Url(cookieUrl).Build()
 	resp, err := client.Execute(req)
 	if err != nil {
 		return nil
 	}
 	result, _ := resp.BodyString()
-	fmt.Println(result)
 	return praseCookie(result)
 }
 
 func praseCookie(content string) *Session {
+	fmt.Println("cookie: ", content)
 	session := &Session{}
 	flag, r := match("<ret>(\\S+)</ret>", content)
 	if r != nil || flag != "0" {
@@ -256,6 +263,12 @@ func praseCookie(content string) *Session {
 	session.wxsid = wxsid
 	session.wxuin = wxuin
 	session.pass_ticket = pass_ticket
+
+	fmt.Println("skey : ",skey)
+	fmt.Println("sid : ",wxsid)
+	fmt.Println("uin : ",wxuin)
+	fmt.Println("pass_ticket : ",pass_ticket)
+
 	return session
 }
 
@@ -265,7 +278,7 @@ func wxInit(session *Session) *WXOrigin {
 	jsonData, _ := json.Marshal(obj)
 	jsonbody := JsonBodyBuilder().Json(jsonData).Build()
 	url := fmt.Sprintf(INIT_URL, wxHost, session.pass_ticket, session.skey, now())
-	req, _ := RequestBuilder().Url(url).Post(jsonbody).Build()
+	req, _ := RequestBuilder().Header("User-agent","Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/48.0.2564.109 Safari/537.36").Url(url).Post(jsonbody).Build()
 	resp, err := client.Execute(req)
 	if err == nil {
 		response, _ := resp.BodyByte()
@@ -286,11 +299,10 @@ func wxstatusnotify(session *Session, user *User) {
 	obj["ToUserName"] = user.UserName
 	obj["ClientMsgId"] = time.Now().UnixNano() / 1000000
 	jsonData, _ := json.Marshal(obj)
-	fmt.Println(string(jsonData))
 	jsonbody := JsonBodyBuilder().Json(jsonData).Build()
 	url := fmt.Sprintf(STATUS_NOTIFY_URL, wxHost, session.pass_ticket)
 	fmt.Println(url)
-	req, _ := RequestBuilder().Url(url).Post(jsonbody).Build()
+	req, _ := RequestBuilder().Header("User-agent","Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/48.0.2564.109 Safari/537.36").Url(url).Post(jsonbody).Build()
 	resp, err := client.Execute(req)
 	if err == nil {
 		response, _ := resp.BodyByte()
@@ -304,10 +316,9 @@ func getContact(session *Session) {
 	obj := make(map[string]BaseRequest)
 	obj["BaseRequest"] = BaseRequest{session.wxuin, session.wxsid, session.skey, DeviceID}
 	jsonData, _ := json.Marshal(obj)
-	fmt.Println(string(jsonData))
 	jsonbody := JsonBodyBuilder().Json(jsonData).Build()
 	url := fmt.Sprintf(CONTACT_URL, wxHost, session.pass_ticket, session.skey, now())
-	req, _ := RequestBuilder().Url(url).Post(jsonbody).Build()
+	req, _ := RequestBuilder().Header("User-agent","Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/48.0.2564.109 Safari/537.36").Url(url).Post(jsonbody).Build()
 	resp, err := client.Execute(req)
 	if err == nil {
 		bytes, _ := resp.BodyByte()
@@ -318,6 +329,65 @@ func getContact(session *Session) {
 		log.Println("wxinit error ", err)
 	}
 }
+
+
+func testsyncCheck(session *Session) (int, int) {
+	param := make(map[string][]string)
+	param["sid"] = []string{session.wxsid}
+	param["uin"] = []string{session.wxuin}
+	param["skey"] = []string{session.skey}
+	param["deviceid"] = []string{DeviceID}
+	param["synckey"] = []string{synckey}
+	param["_"] = []string{now()}
+	param["r"] = []string{now()}
+
+
+	hosts := []string{"wx2.qq.com",
+	"webpush.wx2.qq.com",
+	"wx8.qq.com",
+	"webpush.wx8.qq.com",
+	"qq.com",
+	"webpush.wx.qq.com",
+	"web2.wechat.com",
+	"webpush.web2.wechat.com",
+	"webpush.web.wechat.com",
+	"webpush.weixin.qq.com",
+	"webpush.wechat.com",
+	"webpush1.wechat.com",
+	"webpush2.wechat.com",
+	"webpush.wx.qq.com",
+	"webpush2.wx.qq.com"}
+
+	for _, host := range hosts {
+		url := fmt.Sprintf(SYNC_CHECK, host)
+		url = BuildGetUrl(url, param)
+		fmt.Println("syncCheck url: " + url)
+		req, _ := RequestBuilder().Header("User-agent","Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/48.0.2564.109 Safari/537.36").Url(url).Build()
+		resp, err := client.Execute(req)
+		if err == nil {
+			response, _ := resp.BodyString()
+			fmt.Println("syncCheck response: " + response)
+			retcodeStr, _ := match("retcode:\"(\\d+)\",", response)
+			retcode, e := strconv.Atoi(retcodeStr)
+			if (e != nil) {
+				return -1, -1
+			}
+			selectorStr, e := match("selector:\"(\\d+)\"}", response)
+			selector, e := strconv.Atoi(selectorStr)
+			if (e != nil) {
+				return -1, -1
+			}
+			if(retcode==0){
+				wxSyncHost=host
+				return retcode,selector
+			}
+		} else {
+			log.Println("wxinit error ", err)
+		}
+	}
+	return -1, -1
+}
+
 
 func syncCheck(session *Session) (int, int) {
 	param := make(map[string][]string)
@@ -331,12 +401,12 @@ func syncCheck(session *Session) (int, int) {
 
 	url := fmt.Sprintf(SYNC_CHECK, wxSyncHost)
 	url = BuildGetUrl(url, param)
-	fmt.Println(url)
-	req, _ := RequestBuilder().Url(url).Build()
+	fmt.Println("syncCheck url: " + url)
+	req, _ := RequestBuilder().Header("User-agent","Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/48.0.2564.109 Safari/537.36").Url(url).Build()
 	resp, err := client.Execute(req)
 	if err == nil {
 		response, _ := resp.BodyString()
-		fmt.Println(response)
+		fmt.Println("syncCheck response: " + response)
 		retcodeStr, _ := match("retcode:\"(\\d+)\",", response)
 		retcode, e := strconv.Atoi(retcodeStr)
 		if (e != nil) {
@@ -364,7 +434,7 @@ func getNewMessage(session *Session, key *SyncKey) {
 	jsonbody := JsonBodyBuilder().Json(jsonData).Build()
 	url := fmt.Sprintf(MSG_URL, wxHost, session.wxsid, session.skey, session.pass_ticket)
 	fmt.Println(url)
-	req, _ := RequestBuilder().Url(url).Post(jsonbody).Build()
+	req, _ := RequestBuilder().Header("User-agent","Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/48.0.2564.109 Safari/537.36").Url(url).Post(jsonbody).Build()
 	resp, err := client.Execute(req)
 	if err == nil {
 		response, _ := resp.BodyByte()
@@ -383,7 +453,7 @@ func sendMsg(session *Session, content string, from string, to string) {
 	fmt.Println(string(jsonData))
 	jsonbody := JsonBodyBuilder().Json(jsonData).Build()
 	url := fmt.Sprintf(SNED_MSG_URL, wxHost, session.pass_ticket)
-	req, _ := RequestBuilder().Url(url).Post(jsonbody).Build()
+	req, _ := RequestBuilder().Header("User-agent","Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/48.0.2564.109 Safari/537.36").Url(url).Post(jsonbody).Build()
 	resp, err := client.Execute(req)
 	if err == nil {
 		response, _ := resp.BodyString()
@@ -394,8 +464,12 @@ func sendMsg(session *Session, content string, from string, to string) {
 }
 
 func polling(session *Session, originData *WXOrigin) {
-	for {
-		retcode, selector := syncCheck(session)
+	retcode, selector := testsyncCheck(session)
+	if retcode==0{
+		handleMsg(selector, session, originData)
+	}
+	for i := 0; i < 2; i++ {
+		retcode, selector = syncCheck(session)
 		switch (retcode) {
 		case 1100:
 			log.Println("在手机上退出了登录", retcode, selector)
@@ -407,7 +481,7 @@ func polling(session *Session, originData *WXOrigin) {
 			log.Println("你在手机上主动退出了", retcode, selector)
 			break
 		case 0:
-			go handleMsg(selector, session, originData)
+			handleMsg(selector, session, originData)
 			break;
 		default:
 			log.Println("未知返回值", retcode, selector)
