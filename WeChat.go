@@ -23,6 +23,7 @@ const (
 	INIT_URL          = "https://%s/cgi-bin/mmwebwx-bin/webwxinit?pass_ticket=%s&skey=%s&r=%s"
 	STATUS_NOTIFY_URL = "https://%s/cgi-bin/mmwebwx-bin/webwxstatusnotify?lang=zh_CN&pass_ticket=%s"
 	CONTACT_URL       = "https://%s/cgi-bin/mmwebwx-bin/webwxgetcontact?pass_ticket=%s&skey=%s&r=%s"
+	BATCH_CONTACT_URL = "https://%s/cgi-bin/mmwebwx-bin/webwxbatchgetcontact?type=ex&r=%s&pass_ticket=%s"
 	SYNC_CHECK        = "https://%s/cgi-bin/mmwebwx-bin/synccheck"
 	MSG_URL           = "https://%s/cgi-bin/mmwebwx-bin/webwxsync?sid=%s&skey=%s&pass_ticket=%s"
 	SNED_MSG_URL      = "https://%s/cgi-bin/mmwebwx-bin/webwxsendmsg?pass_ticket=xxx"
@@ -130,7 +131,7 @@ func now() string {
 	return strconv.FormatInt(time.Now().Unix()*1000, 10)
 }
 
-func getDeviceId() string{
+func getDeviceId() string {
 	rnd := rand.New(rand.NewSource(time.Now().UnixNano()))
 	pre := fmt.Sprintf("%08v", rnd.Int31n(100000000))
 	end := fmt.Sprintf("%07v", rnd.Int31n(10000000))
@@ -153,7 +154,7 @@ func UUID() (string, error) {
 	param["lang"] = []string{"zh_CN"}
 	param["_"] = []string{now()}
 	url := BuildGetUrl(UUID_URL, param)
-	req, _ := RequestBuilder().Header("User-agent","Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/48.0.2564.109 Safari/537.36").Url(url).Build()
+	req, _ := RequestBuilder().Header("User-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/48.0.2564.109 Safari/537.36").Url(url).Build()
 	resp, err := client.Execute(req)
 	if err == nil {
 		result, _ := resp.BodyString()
@@ -175,7 +176,7 @@ func UUID() (string, error) {
 
 func ShowQrCode(uuid string) {
 	postbody := FormBodyBuilder().AddParam("t", "webwx").AddParam("_", now()).Build()
-	req, _ := RequestBuilder().Header("User-agent","Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/48.0.2564.109 Safari/537.36").Url(QRCODE_URL + uuid).Post(postbody).Build()
+	req, _ := RequestBuilder().Header("User-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/48.0.2564.109 Safari/537.36").Url(QRCODE_URL + uuid).Post(postbody).Build()
 	resp, err := client.Execute(req)
 	if err == nil {
 		bytes, _ := resp.BodyByte()
@@ -192,7 +193,7 @@ func waitForLogin(uuid string, time4Wait time.Duration) bool {
 	param["uuid"] = []string{uuid}
 	param["_"] = []string{now()}
 	url := BuildGetUrl(LOGIN_URL, param)
-	req, _ := RequestBuilder().Header("User-agent","Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/48.0.2564.109 Safari/537.36").Url(url).Build()
+	req, _ := RequestBuilder().Header("User-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/48.0.2564.109 Safari/537.36").Url(url).Build()
 	resp, err := client.Execute(req)
 	if err != nil {
 		log.Println("get qrcode error:", err)
@@ -239,7 +240,7 @@ func getCookie() *Session {
 	if cookieUrl == "" {
 
 	}
-	req, _ := RequestBuilder().Header("User-agent","Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/48.0.2564.109 Safari/537.36").Url(cookieUrl).Build()
+	req, _ := RequestBuilder().Header("User-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/48.0.2564.109 Safari/537.36").Url(cookieUrl).Build()
 	resp, err := client.Execute(req)
 	if err != nil {
 		return nil
@@ -264,10 +265,10 @@ func praseCookie(content string) *Session {
 	session.wxuin = wxuin
 	session.pass_ticket = pass_ticket
 
-	fmt.Println("skey : ",skey)
-	fmt.Println("sid : ",wxsid)
-	fmt.Println("uin : ",wxuin)
-	fmt.Println("pass_ticket : ",pass_ticket)
+	fmt.Println("skey : ", skey)
+	fmt.Println("sid : ", wxsid)
+	fmt.Println("uin : ", wxuin)
+	fmt.Println("pass_ticket : ", pass_ticket)
 
 	return session
 }
@@ -278,7 +279,7 @@ func wxInit(session *Session) *WXOrigin {
 	jsonData, _ := json.Marshal(obj)
 	jsonbody := JsonBodyBuilder().Json(jsonData).Build()
 	url := fmt.Sprintf(INIT_URL, wxHost, session.pass_ticket, session.skey, now())
-	req, _ := RequestBuilder().Header("User-agent","Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/48.0.2564.109 Safari/537.36").Url(url).Post(jsonbody).Build()
+	req, _ := RequestBuilder().Header("User-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/48.0.2564.109 Safari/537.36").Url(url).Post(jsonbody).Build()
 	resp, err := client.Execute(req)
 	if err == nil {
 		response, _ := resp.BodyByte()
@@ -302,7 +303,7 @@ func wxstatusnotify(session *Session, user *User) {
 	jsonbody := JsonBodyBuilder().Json(jsonData).Build()
 	url := fmt.Sprintf(STATUS_NOTIFY_URL, wxHost, session.pass_ticket)
 	fmt.Println(url)
-	req, _ := RequestBuilder().Header("User-agent","Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/48.0.2564.109 Safari/537.36").Url(url).Post(jsonbody).Build()
+	req, _ := RequestBuilder().Header("User-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/48.0.2564.109 Safari/537.36").Url(url).Post(jsonbody).Build()
 	resp, err := client.Execute(req)
 	if err == nil {
 		response, _ := resp.BodyByte()
@@ -318,7 +319,7 @@ func getContact(session *Session) {
 	jsonData, _ := json.Marshal(obj)
 	jsonbody := JsonBodyBuilder().Json(jsonData).Build()
 	url := fmt.Sprintf(CONTACT_URL, wxHost, session.pass_ticket, session.skey, now())
-	req, _ := RequestBuilder().Header("User-agent","Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/48.0.2564.109 Safari/537.36").Url(url).Post(jsonbody).Build()
+	req, _ := RequestBuilder().Header("User-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/48.0.2564.109 Safari/537.36").Url(url).Post(jsonbody).Build()
 	resp, err := client.Execute(req)
 	if err == nil {
 		bytes, _ := resp.BodyByte()
@@ -330,6 +331,36 @@ func getContact(session *Session) {
 	}
 }
 
+type Room struct {
+	UserName        string
+	EncryChatRoomId string
+}
+
+func batchGetContact(session *Session) {
+
+	list := make([]Room, 5)
+	for _, member := range members {
+		if member.UserName!="" && strings.Index(member.UserName, "@@") == 0 {
+			list = append(list, Room{member.UserName, ""})
+		}
+	}
+
+	obj := make(map[string]interface{})
+	obj["BaseRequest"] = BaseRequest{session.wxuin, session.wxsid, session.skey, DeviceID}
+	obj["Count"] = len(list)
+	obj["List"] = list
+	jsonData, _ := json.Marshal(obj)
+	jsonbody := JsonBodyBuilder().Json(jsonData).Build()
+	url := fmt.Sprintf(BATCH_CONTACT_URL, wxHost, now(), session.pass_ticket)
+	req, _ := RequestBuilder().Header("User-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/48.0.2564.109 Safari/537.36").Url(url).Post(jsonbody).Build()
+	resp, err := client.Execute(req)
+	if err == nil {
+		bytes, _ := resp.BodyString()
+		fmt.Println(bytes)
+	} else {
+		log.Println("wxinit error ", err)
+	}
+}
 
 func testsyncCheck(session *Session) (int, int) {
 	param := make(map[string][]string)
@@ -341,28 +372,26 @@ func testsyncCheck(session *Session) (int, int) {
 	param["_"] = []string{now()}
 	param["r"] = []string{now()}
 
-
 	hosts := []string{"wx2.qq.com",
-	"webpush.wx2.qq.com",
-	"wx8.qq.com",
-	"webpush.wx8.qq.com",
-	"qq.com",
-	"webpush.wx.qq.com",
-	"web2.wechat.com",
-	"webpush.web2.wechat.com",
-	"webpush.web.wechat.com",
-	"webpush.weixin.qq.com",
-	"webpush.wechat.com",
-	"webpush1.wechat.com",
-	"webpush2.wechat.com",
-	"webpush.wx.qq.com",
-	"webpush2.wx.qq.com"}
+		"webpush.wx2.qq.com",
+		"wx8.qq.com",
+		"webpush.wx8.qq.com",
+		"webpush.wx.qq.com",
+		"web2.wechat.com",
+		"webpush.web2.wechat.com",
+		"webpush.web.wechat.com",
+		"webpush.weixin.qq.com",
+		"webpush.wechat.com",
+		"webpush1.wechat.com",
+		"webpush2.wechat.com",
+		"webpush.wx.qq.com",
+		"webpush2.wx.qq.com"}
 
 	for _, host := range hosts {
 		url := fmt.Sprintf(SYNC_CHECK, host)
 		url = BuildGetUrl(url, param)
 		fmt.Println("syncCheck url: " + url)
-		req, _ := RequestBuilder().Header("User-agent","Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/48.0.2564.109 Safari/537.36").Url(url).Build()
+		req, _ := RequestBuilder().Header("User-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/48.0.2564.109 Safari/537.36").Url(url).Build()
 		resp, err := client.Execute(req)
 		if err == nil {
 			response, _ := resp.BodyString()
@@ -377,9 +406,9 @@ func testsyncCheck(session *Session) (int, int) {
 			if (e != nil) {
 				return -1, -1
 			}
-			if(retcode==0){
-				wxSyncHost=host
-				return retcode,selector
+			if (retcode == 0) {
+				wxSyncHost = host
+				return retcode, selector
 			}
 		} else {
 			log.Println("wxinit error ", err)
@@ -387,7 +416,6 @@ func testsyncCheck(session *Session) (int, int) {
 	}
 	return -1, -1
 }
-
 
 func syncCheck(session *Session) (int, int) {
 	param := make(map[string][]string)
@@ -402,7 +430,7 @@ func syncCheck(session *Session) (int, int) {
 	url := fmt.Sprintf(SYNC_CHECK, wxSyncHost)
 	url = BuildGetUrl(url, param)
 	fmt.Println("syncCheck url: " + url)
-	req, _ := RequestBuilder().Header("User-agent","Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/48.0.2564.109 Safari/537.36").Url(url).Build()
+	req, _ := RequestBuilder().Header("User-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/48.0.2564.109 Safari/537.36").Url(url).Build()
 	resp, err := client.Execute(req)
 	if err == nil {
 		response, _ := resp.BodyString()
@@ -434,7 +462,7 @@ func getNewMessage(session *Session, key *SyncKey) {
 	jsonbody := JsonBodyBuilder().Json(jsonData).Build()
 	url := fmt.Sprintf(MSG_URL, wxHost, session.wxsid, session.skey, session.pass_ticket)
 	fmt.Println(url)
-	req, _ := RequestBuilder().Header("User-agent","Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/48.0.2564.109 Safari/537.36").Url(url).Post(jsonbody).Build()
+	req, _ := RequestBuilder().Header("User-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/48.0.2564.109 Safari/537.36").Url(url).Post(jsonbody).Build()
 	resp, err := client.Execute(req)
 	if err == nil {
 		response, _ := resp.BodyByte()
@@ -453,7 +481,7 @@ func sendMsg(session *Session, content string, from string, to string) {
 	fmt.Println(string(jsonData))
 	jsonbody := JsonBodyBuilder().Json(jsonData).Build()
 	url := fmt.Sprintf(SNED_MSG_URL, wxHost, session.pass_ticket)
-	req, _ := RequestBuilder().Header("User-agent","Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/48.0.2564.109 Safari/537.36").Url(url).Post(jsonbody).Build()
+	req, _ := RequestBuilder().Header("User-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/48.0.2564.109 Safari/537.36").Url(url).Post(jsonbody).Build()
 	resp, err := client.Execute(req)
 	if err == nil {
 		response, _ := resp.BodyString()
@@ -465,7 +493,7 @@ func sendMsg(session *Session, content string, from string, to string) {
 
 func polling(session *Session, originData *WXOrigin) {
 	retcode, selector := testsyncCheck(session)
-	if retcode==0{
+	if retcode == 0 {
 		handleMsg(selector, session, originData)
 	}
 	for i := 0; i < 2; i++ {
@@ -545,6 +573,7 @@ func main() {
 		generateSyncKey(originData.SyncKey.List)
 		wxstatusnotify(session, &originData.User)
 		getContact(session)
+		batchGetContact(session)
 		polling(session, originData)
 	} else {
 		fmt.Println(err)
