@@ -13,10 +13,11 @@ import (
 	"encoding/json"
 	"math/rand"
 	"bytes"
+	"os"
 )
 
 const (
-	TIME_WAIT         = 10
+	TIME_WAIT         = 5
 	UUID_URL          = "https://login.weixin.qq.com/jslogin"
 	QRCODE_URL        = "https://login.weixin.qq.com/qrcode/"
 	LOGIN_URL         = "https://login.weixin.qq.com/cgi-bin/mmwebwx-bin/login"
@@ -26,10 +27,24 @@ const (
 	BATCH_CONTACT_URL = "https://%s/cgi-bin/mmwebwx-bin/webwxbatchgetcontact?type=ex&r=%s&pass_ticket=%s"
 	SYNC_CHECK        = "https://%s/cgi-bin/mmwebwx-bin/synccheck"
 	MSG_URL           = "https://%s/cgi-bin/mmwebwx-bin/webwxsync?sid=%s&skey=%s&pass_ticket=%s"
-	SNED_MSG_URL      = "https://%s/cgi-bin/mmwebwx-bin/webwxsendmsg?pass_ticket=xxx"
+	SNED_MSG_URL      = "https://%s/cgi-bin/mmwebwx-bin/webwxsendmsg?pass_ticket=%s"
 
-	DeviceID = "e127141056881012"
+	TUING_BOT_URL = "http://www.tuling123.com/openapi/api"
+	TUING_BOT_KEY = ""
 )
+
+type TulingMsg struct {
+	key    string
+	info   string
+	userid string
+}
+
+type TulingReply struct {
+	code int
+	text string
+	url  string
+	list string
+}
 
 type Session struct {
 	uuid        string
@@ -97,6 +112,11 @@ type WXOrigin struct {
 	ClickReportInterval int
 }
 
+type Room struct {
+	UserName        string
+	EncryChatRoomId string
+}
+
 type Member struct {
 	UserName   string
 	NickName   string
@@ -108,6 +128,33 @@ type MemberData struct {
 	MemberCount  int
 	MemberList   []Member
 }
+type AddMsg struct {
+	FromUserName         string
+	PlayLength           int
+	Content              string
+	StatusNotifyUserName string
+	StatusNotifyCode     int
+	Status               int
+	VoiceLength          int
+	ToUserName           string
+	ForwardFlag          int
+	AppMsgType           int
+	Url                  string
+	ImgStatus            int
+	MsgType              int
+	ImgHeight            int
+	MediaId              string
+	FileName             string
+	FileSize             string
+}
+
+type AddMsgResponse struct {
+	BaseResponse BaseResponse
+	SyncKey      SyncKey
+	ContinueFlag int
+	AddMsgCount  int
+	AddMsgList   []AddMsg
+}
 
 type Msg struct {
 	Type         int
@@ -118,17 +165,33 @@ type Msg struct {
 	ClientMsgId  string
 }
 
-var wxHost string
+var session *Session
 var wxSyncHost = "webpush.weixin.qq.com"
-
+var wxHost string
+var deviceID string
 var cookieUrl string
 var members []Member
 var synckey string
+var me string
+var twogoods string
+var weGroup = "@@03a689f59245f2f6a4b431e291da45f49db657f1f2fe31f3c4e4b701ef3de82e"
 
-var client = HttpClientBuilder().Build()
+var client = HttpClientBuilder().EnableCookie(true).Build()
+
+func init() {
+	deviceID = getDeviceId()
+}
 
 func now() string {
 	return strconv.FormatInt(time.Now().Unix()*1000, 10)
+}
+
+func nowWitRandom() string {
+	second := time.Now().Unix()
+	rnd := rand.New(rand.NewSource(second))
+	code := fmt.Sprintf("%06v", rnd.Int31n(1000000))
+	return strconv.FormatInt(second, 10) + code
+
 }
 
 func getDeviceId() string {
@@ -237,9 +300,6 @@ func setWxSyncHost() {
 }
 
 func getCookie() *Session {
-	if cookieUrl == "" {
-
-	}
 	req, _ := RequestBuilder().Header("User-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/48.0.2564.109 Safari/537.36").Url(cookieUrl).Build()
 	resp, err := client.Execute(req)
 	if err != nil {
@@ -273,9 +333,9 @@ func praseCookie(content string) *Session {
 	return session
 }
 
-func wxInit(session *Session) *WXOrigin {
+func wxInit() *WXOrigin {
 	obj := make(map[string]BaseRequest)
-	obj["BaseRequest"] = BaseRequest{session.wxuin, session.wxsid, session.skey, DeviceID}
+	obj["BaseRequest"] = BaseRequest{session.wxuin, session.wxsid, session.skey, deviceID}
 	jsonData, _ := json.Marshal(obj)
 	jsonbody := JsonBodyBuilder().Json(jsonData).Build()
 	url := fmt.Sprintf(INIT_URL, wxHost, session.pass_ticket, session.skey, now())
@@ -292,9 +352,9 @@ func wxInit(session *Session) *WXOrigin {
 	return nil
 }
 
-func wxstatusnotify(session *Session, user *User) {
+func wxstatusnotify(user *User) {
 	obj := make(map[string]interface{})
-	obj["BaseRequest"] = BaseRequest{session.wxuin, session.wxsid, session.skey, DeviceID}
+	obj["BaseRequest"] = BaseRequest{session.wxuin, session.wxsid, session.skey, deviceID}
 	obj["Code"] = 3
 	obj["FromUserName"] = user.UserName
 	obj["ToUserName"] = user.UserName
@@ -302,20 +362,16 @@ func wxstatusnotify(session *Session, user *User) {
 	jsonData, _ := json.Marshal(obj)
 	jsonbody := JsonBodyBuilder().Json(jsonData).Build()
 	url := fmt.Sprintf(STATUS_NOTIFY_URL, wxHost, session.pass_ticket)
-	fmt.Println(url)
 	req, _ := RequestBuilder().Header("User-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/48.0.2564.109 Safari/537.36").Url(url).Post(jsonbody).Build()
-	resp, err := client.Execute(req)
-	if err == nil {
-		response, _ := resp.BodyByte()
-		fmt.Println(string(response))
-	} else {
+	_, err := client.Execute(req)
+	if err != nil {
 		log.Println("wxinit error ", err)
 	}
 }
 
-func getContact(session *Session) {
+func getContact() {
 	obj := make(map[string]BaseRequest)
-	obj["BaseRequest"] = BaseRequest{session.wxuin, session.wxsid, session.skey, DeviceID}
+	obj["BaseRequest"] = BaseRequest{session.wxuin, session.wxsid, session.skey, deviceID}
 	jsonData, _ := json.Marshal(obj)
 	jsonbody := JsonBodyBuilder().Json(jsonData).Build()
 	url := fmt.Sprintf(CONTACT_URL, wxHost, session.pass_ticket, session.skey, now())
@@ -326,27 +382,36 @@ func getContact(session *Session) {
 		memberData := &MemberData{}
 		json.Unmarshal(bytes, &memberData)
 		members = memberData.MemberList
+		filterContact()
 	} else {
 		log.Println("wxinit error ", err)
 	}
 }
 
-type Room struct {
-	UserName        string
-	EncryChatRoomId string
+func filterContact() {
+	for _, member := range members {
+		if member.NickName == "twogoods" && strings.Index(member.UserName, "@") == 0 {
+			twogoods = member.UserName
+			fmt.Println("me : ", member.UserName)
+		}
+		if member.NickName == "小目标要有，养身是第一位的！" && strings.Index(member.UserName, "@@") == 0 {
+			weGroup = member.UserName
+			fmt.Println("we : ", member.UserName)
+		}
+	}
+
 }
 
-func batchGetContact(session *Session) {
-
+func batchGetContact() {
 	list := make([]Room, 5)
 	for _, member := range members {
-		if member.UserName!="" && strings.Index(member.UserName, "@@") == 0 {
+		if member.UserName != "" && strings.Index(member.UserName, "@@") == 0 {
 			list = append(list, Room{member.UserName, ""})
 		}
 	}
 
 	obj := make(map[string]interface{})
-	obj["BaseRequest"] = BaseRequest{session.wxuin, session.wxsid, session.skey, DeviceID}
+	obj["BaseRequest"] = BaseRequest{session.wxuin, session.wxsid, session.skey, deviceID}
 	obj["Count"] = len(list)
 	obj["List"] = list
 	jsonData, _ := json.Marshal(obj)
@@ -355,8 +420,7 @@ func batchGetContact(session *Session) {
 	req, _ := RequestBuilder().Header("User-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/48.0.2564.109 Safari/537.36").Url(url).Post(jsonbody).Build()
 	resp, err := client.Execute(req)
 	if err == nil {
-		bytes, _ := resp.BodyString()
-		fmt.Println(bytes)
+		resp.BodyString()
 	} else {
 		log.Println("wxinit error ", err)
 	}
@@ -367,12 +431,14 @@ func testsyncCheck(session *Session) (int, int) {
 	param["sid"] = []string{session.wxsid}
 	param["uin"] = []string{session.wxuin}
 	param["skey"] = []string{session.skey}
-	param["deviceid"] = []string{DeviceID}
+	param["deviceid"] = []string{deviceID}
 	param["synckey"] = []string{synckey}
 	param["_"] = []string{now()}
 	param["r"] = []string{now()}
 
-	hosts := []string{"wx2.qq.com",
+	hosts := []string{
+		"webpush.wx.qq.com",
+		"wx2.qq.com",
 		"webpush.wx2.qq.com",
 		"wx8.qq.com",
 		"webpush.wx8.qq.com",
@@ -384,7 +450,6 @@ func testsyncCheck(session *Session) (int, int) {
 		"webpush.wechat.com",
 		"webpush1.wechat.com",
 		"webpush2.wechat.com",
-		"webpush.wx.qq.com",
 		"webpush2.wx.qq.com"}
 
 	for _, host := range hosts {
@@ -422,7 +487,7 @@ func syncCheck(session *Session) (int, int) {
 	param["sid"] = []string{session.wxsid}
 	param["uin"] = []string{session.wxuin}
 	param["skey"] = []string{session.skey}
-	param["deviceid"] = []string{DeviceID}
+	param["deviceid"] = []string{deviceID}
 	param["synckey"] = []string{synckey}
 	param["_"] = []string{now()}
 	param["r"] = []string{now()}
@@ -452,11 +517,11 @@ func syncCheck(session *Session) (int, int) {
 	return -1, -1
 }
 
-func getNewMessage(session *Session, key *SyncKey) {
+func getNewMessage(key *SyncKey) {
 	obj := make(map[string]interface{})
-	obj["BaseRequest"] = BaseRequest{session.wxuin, session.wxsid, session.skey, DeviceID}
+	obj["BaseRequest"] = BaseRequest{session.wxuin, session.wxsid, session.skey, deviceID}
 	obj["SyncKey"] = key
-	obj["rr"] = time.Now().Unix()
+	obj["rr"] = ^time.Now().Unix() + 1
 	jsonData, _ := json.Marshal(obj)
 	fmt.Println(string(jsonData))
 	jsonbody := JsonBodyBuilder().Json(jsonData).Build()
@@ -465,18 +530,89 @@ func getNewMessage(session *Session, key *SyncKey) {
 	req, _ := RequestBuilder().Header("User-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/48.0.2564.109 Safari/537.36").Url(url).Post(jsonbody).Build()
 	resp, err := client.Execute(req)
 	if err == nil {
-		response, _ := resp.BodyByte()
-		fmt.Println(string(response))
+		bytes, _ := resp.BodyByte()
+		addMsgResponse := AddMsgResponse{}
+		json.Unmarshal(bytes, &addMsgResponse)
+		generateSyncKey(addMsgResponse.SyncKey.List)
+		if addMsgResponse.AddMsgCount > 0 {
+			filterTxtMsg(addMsgResponse.AddMsgList)
+		}
 	} else {
 		log.Println("wxinit error ", err)
 	}
 }
 
-func sendMsg(session *Session, content string, from string, to string) {
+func filterTxtMsg(messages []AddMsg) {
+	for _, msg := range messages {
+		if msg.MsgType == 1 {
+			log.Println("msg: ", msg.Content)
+			log.Println("from: ", msg.FromUserName)
+			log.Println("to: ", msg.ToUserName)
+
+			if strings.Contains(msg.Content, "@twogoods") {
+				content := ""
+				sender := ""
+				replyReceiver := msg.FromUserName
+				if strings.Index(msg.FromUserName, "@@") == 0 {
+					//群消息
+					items := strings.Split(msg.Content, ":<br/>")
+					sender = items[0]
+					content = strings.Replace(items[1], "@twogoods", "", -1)
+				} else {
+					//私聊消息 或者 我发的群消息
+					if strings.Index(msg.ToUserName, "@@") == 0 {
+						// 我在别的设备发的群消息
+						replyReceiver = msg.ToUserName
+					}
+					content = strings.Replace(msg.Content, "@twogoods", "", -1)
+					sender = msg.FromUserName
+				}
+				reply, e := getReplyFromTuling(content, sender)
+				if (e == nil) {
+					fmt.Println(reply, replyReceiver)
+					sendTxtMsg(reply, replyReceiver)
+				}
+			}
+		}
+	}
+}
+
+func getReplyFromTuling(content string, user string) (string, error) {
+	userid := user[5:37]
+	param := make(map[string]string)
+	param["key"] = TUING_BOT_KEY
+	param["info"] = content
+	param["userid"] = userid
+	jsonData, _ := json.Marshal(param)
+	fmt.Println(string(jsonData))
+	jsonbody := JsonBodyBuilder().Json(jsonData).Build()
+	req, _ := RequestBuilder().Url(TUING_BOT_URL).Post(jsonbody).Build()
+	resp, err := client.Execute(req)
+	if err == nil {
+		bytes, _ := resp.BodyByte()
+		fmt.Println(string(bytes))
+		reply := &TulingReply{}
+		json.Unmarshal(bytes, &reply)
+		fmt.Println(reply)
+		if reply.code == 100000 {
+			return reply.text, nil
+		} else if reply.code == 200000 {
+			return reply.text + "  " + reply.url, nil
+		} else {
+			return "自己人脑解析 →_→ " + reply.url + "   " + reply.list, nil
+		}
+	} else {
+		log.Println("wxinit error ", err)
+		return "", err
+	}
+}
+
+func sendTxtMsg(content string, to string) {
+	time.Sleep(5 * time.Second)
 	obj := make(map[string]interface{})
-	obj["BaseRequest"] = BaseRequest{session.wxuin, session.wxsid, session.skey, DeviceID}
-	clientMsgId := now()
-	obj["Msg"] = Msg{1, content, from, to, clientMsgId, clientMsgId}
+	obj["BaseRequest"] = BaseRequest{session.wxuin, session.wxsid, session.skey, deviceID}
+	clientMsgId := nowWitRandom()
+	obj["Msg"] = Msg{1, content, me, to, clientMsgId, clientMsgId}
 	jsonData, _ := json.Marshal(obj)
 	fmt.Println(string(jsonData))
 	jsonbody := JsonBodyBuilder().Json(jsonData).Build()
@@ -485,59 +621,44 @@ func sendMsg(session *Session, content string, from string, to string) {
 	resp, err := client.Execute(req)
 	if err == nil {
 		response, _ := resp.BodyString()
-		log.Println(response)
+		log.Println("send msg : ", response)
 	} else {
 		log.Println("wxinit error ", err)
 	}
 }
 
-func polling(session *Session, originData *WXOrigin) {
+func polling(originData *WXOrigin) {
 	retcode, selector := testsyncCheck(session)
 	if retcode == 0 {
-		handleMsg(selector, session, originData)
+		handleMsg(selector, originData)
 	}
-	for i := 0; i < 2; i++ {
+	for {
 		retcode, selector = syncCheck(session)
 		switch (retcode) {
 		case 1100:
 			log.Println("在手机上退出了登录", retcode, selector)
-			break
+			os.Exit(-1)
 		case 1101:
 			log.Println("你在其他地方登录了 WEB 版微信", retcode, selector)
-			break
+			os.Exit(-1)
 		case 1102:
 			log.Println("你在手机上主动退出了", retcode, selector)
-			break
+			os.Exit(-1)
 		case 0:
-			handleMsg(selector, session, originData)
+			handleMsg(selector, originData)
 			break;
 		default:
 			log.Println("未知返回值", retcode, selector)
-			return
+			os.Exit(-1)
 		}
 	}
 }
 
-var flag = true
-var twogoods = "@3298277ebaf5ddada828f0fa6066be070e78889c9be4c190858ca2f6d3f7f861"
-
-func handleMsg(selector int, session *Session, originData *WXOrigin) {
+func handleMsg(selector int, originData *WXOrigin) {
 	if selector != 2 {
 		return
 	}
-	getNewMessage(session, &originData.SyncKey)
-	if (flag) {
-		sendMsg(session, "hello twogoods!!!", originData.User.UserName, twogoods)
-		flag = false
-	}
-}
-
-func randomTime() {
-	rnd := rand.New(rand.NewSource(time.Now().UnixNano()))
-	code := fmt.Sprintf("%05v", rnd.Int31n(100000))
-	time := strconv.FormatInt(time.Now().Unix(), 10)
-	strconv.Atoi(time[0:8] + code)
-
+	getNewMessage(&originData.SyncKey)
 }
 
 func generateSyncKey(keyArr []Key) string {
@@ -560,6 +681,12 @@ func generateSyncKey(keyArr []Key) string {
 
 // 文档 https://my.oschina.net/biezhi/blog/618493
 func main() {
+
+	//msg := TulingMsg{"asdas", "asfsd", "123134"}
+	//jsonData, e := json.Marshal(msg)
+	//fmt.Println(e)
+	//fmt.Println(string(jsonData))
+
 	uuid, err := UUID()
 	if (err == nil) {
 		ShowQrCode(uuid)
@@ -568,13 +695,14 @@ func main() {
 				break;
 			}
 		}
-		session := getCookie()
-		originData := wxInit(session)
+		session = getCookie()
+		originData := wxInit()
+		me = originData.User.UserName
 		generateSyncKey(originData.SyncKey.List)
-		wxstatusnotify(session, &originData.User)
-		getContact(session)
-		batchGetContact(session)
-		polling(session, originData)
+		wxstatusnotify(&originData.User)
+		getContact()
+		batchGetContact()
+		polling(originData)
 	} else {
 		fmt.Println(err)
 	}
