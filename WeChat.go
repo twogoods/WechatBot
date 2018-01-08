@@ -10,9 +10,9 @@ import (
 	"io/ioutil"
 	"log"
 	"strings"
-	"encoding/json"
 	"math/rand"
 	"bytes"
+	"github.com/json-iterator/go"
 	"os"
 )
 
@@ -30,20 +30,20 @@ const (
 	SNED_MSG_URL      = "https://%s/cgi-bin/mmwebwx-bin/webwxsendmsg?pass_ticket=%s"
 
 	TUING_BOT_URL = "http://www.tuling123.com/openapi/api"
-	TUING_BOT_KEY = ""
+	TUING_BOT_KEY = "703b990283de4c47a9e9f5afa15d7ab4"
 )
 
 type TulingMsg struct {
-	key    string
-	info   string
-	userid string
+	Key    string `json:"key"`
+	Info   string `json:"info"`
+	Userid string `json:"userid"`
 }
 
 type TulingReply struct {
-	code int
-	text string
-	url  string
-	list string
+	Code int    `json:"code"`
+	Text string `json:"text"`
+	Url  string `json:"url"`
+	List string `json:"list"`
 }
 
 type Session struct {
@@ -171,7 +171,8 @@ var wxHost string
 var deviceID string
 var cookieUrl string
 var members []Member
-var synckey string
+var synckey SyncKey
+var synckeyStr string
 var me string
 var twogoods string
 var weGroup = "@@03a689f59245f2f6a4b431e291da45f49db657f1f2fe31f3c4e4b701ef3de82e"
@@ -336,7 +337,7 @@ func praseCookie(content string) *Session {
 func wxInit() *WXOrigin {
 	obj := make(map[string]BaseRequest)
 	obj["BaseRequest"] = BaseRequest{session.wxuin, session.wxsid, session.skey, deviceID}
-	jsonData, _ := json.Marshal(obj)
+	jsonData, _ := jsoniter.Marshal(obj)
 	jsonbody := JsonBodyBuilder().Json(jsonData).Build()
 	url := fmt.Sprintf(INIT_URL, wxHost, session.pass_ticket, session.skey, now())
 	req, _ := RequestBuilder().Header("User-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/48.0.2564.109 Safari/537.36").Url(url).Post(jsonbody).Build()
@@ -344,7 +345,7 @@ func wxInit() *WXOrigin {
 	if err == nil {
 		response, _ := resp.BodyByte()
 		var wXOrigin WXOrigin
-		json.Unmarshal(response, &wXOrigin)
+		jsoniter.Unmarshal(response, &wXOrigin)
 		return &wXOrigin
 	} else {
 		log.Println("wxinit error ", err)
@@ -359,7 +360,7 @@ func wxstatusnotify(user *User) {
 	obj["FromUserName"] = user.UserName
 	obj["ToUserName"] = user.UserName
 	obj["ClientMsgId"] = time.Now().UnixNano() / 1000000
-	jsonData, _ := json.Marshal(obj)
+	jsonData, _ := jsoniter.Marshal(obj)
 	jsonbody := JsonBodyBuilder().Json(jsonData).Build()
 	url := fmt.Sprintf(STATUS_NOTIFY_URL, wxHost, session.pass_ticket)
 	req, _ := RequestBuilder().Header("User-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/48.0.2564.109 Safari/537.36").Url(url).Post(jsonbody).Build()
@@ -372,7 +373,7 @@ func wxstatusnotify(user *User) {
 func getContact() {
 	obj := make(map[string]BaseRequest)
 	obj["BaseRequest"] = BaseRequest{session.wxuin, session.wxsid, session.skey, deviceID}
-	jsonData, _ := json.Marshal(obj)
+	jsonData, _ := jsoniter.Marshal(obj)
 	jsonbody := JsonBodyBuilder().Json(jsonData).Build()
 	url := fmt.Sprintf(CONTACT_URL, wxHost, session.pass_ticket, session.skey, now())
 	req, _ := RequestBuilder().Header("User-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/48.0.2564.109 Safari/537.36").Url(url).Post(jsonbody).Build()
@@ -380,7 +381,7 @@ func getContact() {
 	if err == nil {
 		bytes, _ := resp.BodyByte()
 		memberData := &MemberData{}
-		json.Unmarshal(bytes, &memberData)
+		jsoniter.Unmarshal(bytes, &memberData)
 		members = memberData.MemberList
 		filterContact()
 	} else {
@@ -414,7 +415,7 @@ func batchGetContact() {
 	obj["BaseRequest"] = BaseRequest{session.wxuin, session.wxsid, session.skey, deviceID}
 	obj["Count"] = len(list)
 	obj["List"] = list
-	jsonData, _ := json.Marshal(obj)
+	jsonData, _ := jsoniter.Marshal(obj)
 	jsonbody := JsonBodyBuilder().Json(jsonData).Build()
 	url := fmt.Sprintf(BATCH_CONTACT_URL, wxHost, now(), session.pass_ticket)
 	req, _ := RequestBuilder().Header("User-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/48.0.2564.109 Safari/537.36").Url(url).Post(jsonbody).Build()
@@ -432,7 +433,7 @@ func testsyncCheck(session *Session) (int, int) {
 	param["uin"] = []string{session.wxuin}
 	param["skey"] = []string{session.skey}
 	param["deviceid"] = []string{deviceID}
-	param["synckey"] = []string{synckey}
+	param["synckey"] = []string{synckeyStr}
 	param["_"] = []string{now()}
 	param["r"] = []string{now()}
 
@@ -488,7 +489,7 @@ func syncCheck(session *Session) (int, int) {
 	param["uin"] = []string{session.wxuin}
 	param["skey"] = []string{session.skey}
 	param["deviceid"] = []string{deviceID}
-	param["synckey"] = []string{synckey}
+	param["synckey"] = []string{synckeyStr}
 	param["_"] = []string{now()}
 	param["r"] = []string{now()}
 
@@ -517,12 +518,12 @@ func syncCheck(session *Session) (int, int) {
 	return -1, -1
 }
 
-func getNewMessage(key *SyncKey) {
+func getNewMessage() {
 	obj := make(map[string]interface{})
 	obj["BaseRequest"] = BaseRequest{session.wxuin, session.wxsid, session.skey, deviceID}
-	obj["SyncKey"] = key
+	obj["SyncKey"] = synckey
 	obj["rr"] = ^time.Now().Unix() + 1
-	jsonData, _ := json.Marshal(obj)
+	jsonData, _ := jsoniter.Marshal(obj)
 	fmt.Println(string(jsonData))
 	jsonbody := JsonBodyBuilder().Json(jsonData).Build()
 	url := fmt.Sprintf(MSG_URL, wxHost, session.wxsid, session.skey, session.pass_ticket)
@@ -532,8 +533,8 @@ func getNewMessage(key *SyncKey) {
 	if err == nil {
 		bytes, _ := resp.BodyByte()
 		addMsgResponse := AddMsgResponse{}
-		json.Unmarshal(bytes, &addMsgResponse)
-		generateSyncKey(addMsgResponse.SyncKey.List)
+		jsoniter.Unmarshal(bytes, &addMsgResponse)
+		generateSyncKey(addMsgResponse.SyncKey)
 		if addMsgResponse.AddMsgCount > 0 {
 			filterTxtMsg(addMsgResponse.AddMsgList)
 		}
@@ -583,7 +584,7 @@ func getReplyFromTuling(content string, user string) (string, error) {
 	param["key"] = TUING_BOT_KEY
 	param["info"] = content
 	param["userid"] = userid
-	jsonData, _ := json.Marshal(param)
+	jsonData, _ := jsoniter.Marshal(param)
 	fmt.Println(string(jsonData))
 	jsonbody := JsonBodyBuilder().Json(jsonData).Build()
 	req, _ := RequestBuilder().Url(TUING_BOT_URL).Post(jsonbody).Build()
@@ -592,14 +593,14 @@ func getReplyFromTuling(content string, user string) (string, error) {
 		bytes, _ := resp.BodyByte()
 		fmt.Println(string(bytes))
 		reply := &TulingReply{}
-		json.Unmarshal(bytes, &reply)
+		jsoniter.Unmarshal(bytes, &reply)
 		fmt.Println(reply)
-		if reply.code == 100000 {
-			return reply.text, nil
-		} else if reply.code == 200000 {
-			return reply.text + "  " + reply.url, nil
+		if reply.Code == 100000 {
+			return reply.Text, nil
+		} else if reply.Code == 200000 {
+			return reply.Text + "  " + reply.Url, nil
 		} else {
-			return "自己人脑解析 →_→ " + reply.url + "   " + reply.list, nil
+			return "自己人脑解析 →_→ " + reply.Url + "   " + reply.List, nil
 		}
 	} else {
 		log.Println("wxinit error ", err)
@@ -613,8 +614,7 @@ func sendTxtMsg(content string, to string) {
 	obj["BaseRequest"] = BaseRequest{session.wxuin, session.wxsid, session.skey, deviceID}
 	clientMsgId := nowWitRandom()
 	obj["Msg"] = Msg{1, content, me, to, clientMsgId, clientMsgId}
-	jsonData, _ := json.Marshal(obj)
-	fmt.Println(string(jsonData))
+	jsonData, _ := jsoniter.Marshal(obj)
 	jsonbody := JsonBodyBuilder().Json(jsonData).Build()
 	url := fmt.Sprintf(SNED_MSG_URL, wxHost, session.pass_ticket)
 	req, _ := RequestBuilder().Header("User-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/48.0.2564.109 Safari/537.36").Url(url).Post(jsonbody).Build()
@@ -627,41 +627,51 @@ func sendTxtMsg(content string, to string) {
 	}
 }
 
-func polling(originData *WXOrigin) {
+func polling() {
 	retcode, selector := testsyncCheck(session)
 	if retcode == 0 {
-		handleMsg(selector, originData)
+		handleMsg(selector)
 	}
+	flag := 0
 	for {
+		if flag > 10 {
+			os.Exit(-1)
+		}
 		retcode, selector = syncCheck(session)
 		switch (retcode) {
 		case 1100:
 			log.Println("在手机上退出了登录", retcode, selector)
-			os.Exit(-1)
+			flag++
+			break
 		case 1101:
 			log.Println("你在其他地方登录了 WEB 版微信", retcode, selector)
-			os.Exit(-1)
+			flag++
+			break
 		case 1102:
 			log.Println("你在手机上主动退出了", retcode, selector)
-			os.Exit(-1)
+			flag++
+			break
 		case 0:
-			handleMsg(selector, originData)
+			handleMsg(selector)
 			break;
 		default:
 			log.Println("未知返回值", retcode, selector)
-			os.Exit(-1)
+			flag++
+			break
 		}
 	}
 }
 
-func handleMsg(selector int, originData *WXOrigin) {
+func handleMsg(selector int) {
 	if selector != 2 {
 		return
 	}
-	getNewMessage(&originData.SyncKey)
+	getNewMessage()
 }
 
-func generateSyncKey(keyArr []Key) string {
+func generateSyncKey(key SyncKey) {
+	synckey = key
+	keyArr := key.List
 	var buf bytes.Buffer
 	for i := 0; i < len(keyArr); i++ {
 		if i == 0 {
@@ -675,18 +685,11 @@ func generateSyncKey(keyArr []Key) string {
 			buf.WriteString(strconv.Itoa(keyArr[i].Val))
 		}
 	}
-	synckey = buf.String()
-	return synckey
+	synckeyStr = buf.String()
 }
 
 // 文档 https://my.oschina.net/biezhi/blog/618493
 func main() {
-
-	//msg := TulingMsg{"asdas", "asfsd", "123134"}
-	//jsonData, e := json.Marshal(msg)
-	//fmt.Println(e)
-	//fmt.Println(string(jsonData))
-
 	uuid, err := UUID()
 	if (err == nil) {
 		ShowQrCode(uuid)
@@ -698,11 +701,11 @@ func main() {
 		session = getCookie()
 		originData := wxInit()
 		me = originData.User.UserName
-		generateSyncKey(originData.SyncKey.List)
+		generateSyncKey(originData.SyncKey)
 		wxstatusnotify(&originData.User)
 		getContact()
 		batchGetContact()
-		polling(originData)
+		polling()
 	} else {
 		fmt.Println(err)
 	}
