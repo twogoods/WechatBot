@@ -366,7 +366,7 @@ func wxstatusnotify(user *User) {
 	req, _ := RequestBuilder().Header("User-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/48.0.2564.109 Safari/537.36").Url(url).Post(jsonbody).Build()
 	_, err := client.Execute(req)
 	if err != nil {
-		log.Println("wxinit error ", err)
+		log.Println("wxstatusnotify error ", err)
 	}
 }
 
@@ -513,7 +513,7 @@ func syncCheck(session *Session) (int, int) {
 		}
 		return retcode, selector
 	} else {
-		log.Println("wxinit error ", err)
+		log.Println("syncCheck error ", err)
 	}
 	return -1, -1
 }
@@ -539,7 +539,7 @@ func getNewMessage() {
 			filterTxtMsg(addMsgResponse.AddMsgList)
 		}
 	} else {
-		log.Println("wxinit error ", err)
+		log.Println("getNewMessage error ", err)
 	}
 }
 
@@ -554,17 +554,16 @@ func filterTxtMsg(messages []AddMsg) {
 				content := ""
 				sender := ""
 				replyReceiver := msg.FromUserName
+				if msg.FromUserName == me {
+					replyReceiver = msg.ToUserName
+				}
 				if strings.Index(msg.FromUserName, "@@") == 0 {
 					//群消息
 					items := strings.Split(msg.Content, ":<br/>")
 					sender = items[0]
 					content = strings.Replace(items[1], "@twogoods", "", -1)
 				} else {
-					//私聊消息 或者 我发的群消息
-					if strings.Index(msg.ToUserName, "@@") == 0 {
-						// 我在别的设备发的群消息
-						replyReceiver = msg.ToUserName
-					}
+					//私聊消息 或者 我发的消息
 					content = strings.Replace(msg.Content, "@twogoods", "", -1)
 					sender = msg.FromUserName
 				}
@@ -591,19 +590,18 @@ func getReplyFromTuling(content string, user string) (string, error) {
 	resp, err := client.Execute(req)
 	if err == nil {
 		bytes, _ := resp.BodyByte()
-		fmt.Println(string(bytes))
 		reply := &TulingReply{}
 		jsoniter.Unmarshal(bytes, &reply)
 		fmt.Println(reply)
 		if reply.Code == 100000 {
-			return reply.Text, nil
+			return "机器人: " + reply.Text, nil
 		} else if reply.Code == 200000 {
-			return reply.Text + "  " + reply.Url, nil
+			return "机器人: " + reply.Text + "  " + reply.Url, nil
 		} else {
-			return "自己人脑解析 →_→ " + reply.Url + "   " + reply.List, nil
+			return "机器人: 自己人脑解析 →_→ " + reply.Url + "   " + reply.List, nil
 		}
 	} else {
-		log.Println("wxinit error ", err)
+		log.Println("getReplyFromTuling error ", err)
 		return "", err
 	}
 }
@@ -623,7 +621,7 @@ func sendTxtMsg(content string, to string) {
 		response, _ := resp.BodyString()
 		log.Println("send msg : ", response)
 	} else {
-		log.Println("wxinit error ", err)
+		log.Println("sendTxtMsg error ", err)
 	}
 }
 
