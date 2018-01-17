@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "puppeteer": "^1.0.0",
+    "axios": "^0.16.2"
+  }
+}
