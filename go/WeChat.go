@@ -30,7 +30,7 @@ const (
 	SNED_MSG_URL      = "https://%s/cgi-bin/mmwebwx-bin/webwxsendmsg?pass_ticket=%s"
 
 	TUING_BOT_URL = "http://www.tuling123.com/openapi/api"
-	TUING_BOT_KEY = "703b990283de4c47a9e9f5afa15d7ab4"
+	TUING_BOT_KEY = "*****"
 )
 
 type TulingMsg struct {
